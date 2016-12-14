@@ -14,7 +14,7 @@ using NuGet.VisualStudio;
 
 namespace StandaloneUI
 {
-    internal class StandaloneUIContext : NuGetUIContextBase
+    internal class StandaloneUIContext : NuGetUIContext
     {
         private readonly string _settingsFile;
         private Dictionary<string, UserSettings> _settings;

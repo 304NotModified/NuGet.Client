@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Composition;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -19,18 +20,40 @@ namespace NuGet.PackageManagement.UI
     /// <summary>
     /// Performs package manager actions and controls the UI to display output while the actions are taking place.
     /// </summary>
-    public class UIActionEngine
+    [Export]
+    public sealed class UIActionEngine
     {
         private readonly ISourceRepositoryProvider _sourceProvider;
         private readonly NuGetPackageManager _packageManager;
+        private readonly INuGetLockService _lockService;
 
         /// <summary>
         /// Create a UIActionEngine to perform installs/uninstalls
         /// </summary>
-        public UIActionEngine(ISourceRepositoryProvider sourceProvider, NuGetPackageManager packageManager)
+        [ImportingConstructor]
+        public UIActionEngine(
+            ISourceRepositoryProvider sourceProvider, 
+            NuGetPackageManager packageManager,
+            INuGetLockService lockService)
         {
+            if (sourceProvider == null)
+            {
+                throw new ArgumentNullException(nameof(sourceProvider));
+            }
+
+            if (packageManager == null)
+            {
+                throw new ArgumentNullException(nameof(packageManager));
+            }
+
+            if (lockService == null)
+            {
+                throw new ArgumentNullException(nameof(lockService));
+            }
+
             _sourceProvider = sourceProvider;
             _packageManager = packageManager;
+            _lockService = lockService;
         }
 
         /// <summary>

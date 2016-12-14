@@ -11,9 +11,9 @@ namespace NuGetVSExtension
     /// The user settings that are persisted in suo file
     /// </summary>
     [Serializable]
-    internal class NuGetSettings
+    internal sealed class NuGetSettings
     {
-        public Dictionary<string, UserSettings> WindowSettings { get; private set; }
+        public Dictionary<string, UserSettings> WindowSettings { get; }
 
         public NuGetSettings()
         {

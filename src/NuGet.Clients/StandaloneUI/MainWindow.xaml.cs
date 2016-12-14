@@ -42,6 +42,8 @@ namespace StandaloneUI
 
         public MainWindow()
         {
+            StandaloneSwitch.IsRunningStandalone = true;
+
             InitializeComponent();
             _commonOperations = new StandAloneUICommonOperations();
             CreatePackageManagerControl();

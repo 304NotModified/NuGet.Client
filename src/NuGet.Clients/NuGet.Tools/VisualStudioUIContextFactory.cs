@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
-using System.Linq;
 using Microsoft.VisualStudio.Utilities;
 using NuGet.Configuration;
 using NuGet.PackageManagement;
@@ -29,13 +28,15 @@ namespace NuGetVSExtension
         private const int MaxPackageManager = 3;
 
         [ImportingConstructor]
-        public VisualStudioUIContextFactory([Import] ISourceRepositoryProvider repositoryProvider,
-            [Import] ISolutionManager solutionManager,
-            [Import] ISettings settings,
-            [Import] IPackageRestoreManager packageRestoreManager,
-            [Import] IOptionsPageActivator optionsPage,
-            [Import] IDeleteOnRestartManager deleteOnRestartManager,
-            [ImportMany] IEnumerable<Lazy<IVsPackageManagerProvider, IOrderable>> packageManagerProviders)
+        public VisualStudioUIContextFactory(
+            ISourceRepositoryProvider repositoryProvider,
+            ISolutionManager solutionManager,
+            ISettings settings,
+            IPackageRestoreManager packageRestoreManager,
+            IOptionsPageActivator optionsPage,
+            IDeleteOnRestartManager deleteOnRestartManager,
+            [ImportMany]
+            IEnumerable<Lazy<IVsPackageManagerProvider, IOrderable>> packageManagerProviders)
         {
             _repositoryProvider = repositoryProvider;
             _solutionManager = solutionManager;
@@ -48,20 +49,20 @@ namespace NuGetVSExtension
 
         public INuGetUIContext Create(NuGetPackage package, IEnumerable<NuGetProject> projects)
         {
-            if (projects == null
-                || !projects.Any())
+            if (projects == null)
             {
-                throw new ArgumentNullException("projects");
+                throw new ArgumentNullException(nameof(projects));
             }
 
-            NuGetPackageManager packageManager = new NuGetPackageManager(
+            var packageManager = new NuGetPackageManager(
                 _repositoryProvider,
                 _settings,
                 _solutionManager,
                 _deleteOnRestartManager);
-            UIActionEngine actionEngine = new UIActionEngine(_repositoryProvider, packageManager);
 
-            return new VisualStudioUIContext(
+            var actionEngine = new UIActionEngine(_repositoryProvider, packageManager);
+
+            var context = new NuGetUIContext(
                 package,
                 _repositoryProvider,
                 _solutionManager,
@@ -71,6 +72,8 @@ namespace NuGetVSExtension
                 _optionsPage,
                 projects,
                 _packageManagerProviders);
+
+            return context;
         }
     }
 }

@@ -86,9 +86,9 @@ namespace NuGetVSExtension
 
         private IMachineWideSettings _machineWideSettings;
         private NuGetUIProjectContext _uiProjectContext;
-        private NuGetSettings _nugetSettings;
+        private NuGetSettings _nugetSettings = new NuGetSettings();
 
-        private readonly HashSet<Uri> _credentialRequested;
+        private readonly HashSet<Uri> _credentialRequested = new HashSet<Uri>();
 
         public NuGetPackage()
         {
@@ -96,8 +96,6 @@ namespace NuGetVSExtension
             RuntimeEnvironmentHelper.IsDev14 = true;
 #endif
             ServiceLocator.InitializePackageServiceProvider(this);
-            _nugetSettings = new NuGetSettings();
-            _credentialRequested = new HashSet<Uri>();
         }
 
         /// <summary>
@@ -773,22 +771,6 @@ namespace NuGetVSExtension
             solutionPersistence.SavePackageUserOpts(this, "nuget");
         }
 
-        public UserSettings GetWindowSetting(string key)
-        {
-            UserSettings settings;
-            if (_nugetSettings.WindowSettings.TryGetValue(key, out settings))
-            {
-                return settings ?? new UserSettings();
-            }
-
-            return new UserSettings();
-        }
-
-        public void AddWindowSettings(string key, UserSettings obj)
-        {
-            _nugetSettings.WindowSettings[key] = obj;
-        }
-
         private async Task<IVsWindowFrame> CreateDocWindowForSolutionAsync()
         {
             IVsWindowFrame windowFrame = null;
@@ -1059,7 +1041,7 @@ namespace NuGetVSExtension
             {
                 using (var stream = new DataStreamFromComStream(pOptionsStream))
                 {
-                    BinaryFormatter serializer = new BinaryFormatter();
+                    var serializer = new BinaryFormatter();
                     var obj = serializer.Deserialize(stream) as NuGetSettings;
                     if (obj != null)
                     {
@@ -1086,7 +1068,7 @@ namespace NuGetVSExtension
             {
                 using (var stream = new DataStreamFromComStream(pOptionsStream))
                 {
-                    BinaryFormatter serializer = new BinaryFormatter();
+                    var serializer = new BinaryFormatter();
                     serializer.Serialize(stream, _nugetSettings);
                 }
             }
