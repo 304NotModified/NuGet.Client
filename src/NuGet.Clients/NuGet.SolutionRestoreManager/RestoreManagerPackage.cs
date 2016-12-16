@@ -35,52 +35,45 @@ namespace NuGet.SolutionRestoreManager
         /// </summary>
         public const string PackageGuidString = "2b52ac92-4551-426d-bd34-c6d7d9fdd1c5";
 
-        [Import]
-        private ISolutionRestoreWorker SolutionRestoreWorker { get; set; }
+        private Lazy<ISolutionRestoreWorker> _restoreWorker;
+        private Lazy<ISettings> _settings;
+        private Lazy<IVsSolutionManager> _solutionManager;
 
-        [Import]
-        private Lazy<ISettings> Settings { get; set; }
-
-        [Import]
-        private IVsSolutionManager SolutionManager { get; set; }
+        private ISolutionRestoreWorker SolutionRestoreWorker => _restoreWorker.Value;
+        private ISettings Settings => _settings.Value;
+        private IVsSolutionManager SolutionManager => _solutionManager.Value;
 
         // keeps a reference to BuildEvents so that our event handler
         // won't get disconnected.
         private EnvDTE.BuildEvents _buildEvents;
 
-        // keep a reference to initialize task so that it can complete
-        // even after InitializeAsync() is done.
-        private JoinableTask _initializationTask;
-
         protected override async Task InitializeAsync(
-            CancellationToken cancellationToken, 
+            CancellationToken cancellationToken,
             IProgress<ServiceProgressData> progress)
         {
             var componentModel = await GetServiceAsync(typeof(SComponentModel)) as IComponentModel;
             componentModel.DefaultCompositionService.SatisfyImportsOnce(this);
 
-            // Start this initialization task but don't await since it will degrade performance.
-            // will make sure that this piece is always executed on Main thread.
-            // Besides we don't need to wait here to complete since this will only bind to build event which
-            _initializationTask = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                try
-                {
-                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                    var dte = (EnvDTE.DTE)await GetServiceAsync(typeof(SDTE));
-                    _buildEvents = dte.Events.BuildEvents;
-                    _buildEvents.OnBuildBegin += BuildEvents_OnBuildBegin;
+            _restoreWorker = new Lazy<ISolutionRestoreWorker>(
+                () => componentModel.GetService<ISolutionRestoreWorker>());
 
-                    UserAgent.SetUserAgentString(
-                        new UserAgentStringBuilder().WithVisualStudioSKU(dte.GetFullVsVersionString()));
-                }
-                catch (Exception ex)
-                {
-                    // log error to activity logs.
-                    ExceptionHelper.WriteToActivityLog(ex);
-                }
+            _settings = new Lazy<ISettings>(
+                () => componentModel.GetService<ISettings>());
+
+            _solutionManager = new Lazy<IVsSolutionManager>(
+                () => componentModel.GetService<IVsSolutionManager>());
+
+            await ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                var dte = (EnvDTE.DTE)await GetServiceAsync(typeof(SDTE));
+                _buildEvents = dte.Events.BuildEvents;
+                _buildEvents.OnBuildBegin += BuildEvents_OnBuildBegin;
+
+                UserAgent.SetUserAgentString(
+                    new UserAgentStringBuilder().WithVisualStudioSKU(dte.GetFullVsVersionString()));
             });
- 
+
             await base.InitializeAsync(cancellationToken, progress);
         }
 
@@ -119,7 +112,7 @@ namespace NuGet.SolutionRestoreManager
         {
             get
             {
-                var packageRestoreConsent = new PackageRestoreConsent(Settings.Value);
+                var packageRestoreConsent = new PackageRestoreConsent(Settings);
                 return packageRestoreConsent.IsAutomatic;
             }
         }
