@@ -24,6 +24,7 @@ namespace NuGet.Build.Tasks.Pack
         {
             var packArgs = new PackArgs
             {
+                AllowPrereleaseDependenciesInProductionPackage = request.AllowPrereleaseDependencies,
                 Logger = request.Logger,
                 OutputDirectory = request.PackageOutputPath,
                 Serviceable = request.Serviceable,

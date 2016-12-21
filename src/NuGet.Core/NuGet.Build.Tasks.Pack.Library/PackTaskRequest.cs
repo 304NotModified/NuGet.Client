@@ -8,6 +8,7 @@ namespace NuGet.Build.Tasks.Pack
 {
     public class PackTaskRequest : IPackTaskRequest<IMSBuildItem>
     {
+        public bool AllowPrereleaseDependencies { get; set; }
         public string AssemblyName { get; set; }
         public IMSBuildItem[] AssemblyReferences { get; set; }
         public string[] Authors { get; set; }

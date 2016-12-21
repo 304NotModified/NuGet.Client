@@ -8516,6 +8516,15 @@ namespace NuGet.CommandLine {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Allows a stable release of the package to have a prerelease dependency..
+        /// </summary>
+        internal static string PackCommandAllowPrereleaseDependencies {
+            get {
+                return ResourceManager.GetString("PackCommandAllowPrereleaseDependencies", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to nuget pack
         ///
         ///nuget pack foo.nuspec

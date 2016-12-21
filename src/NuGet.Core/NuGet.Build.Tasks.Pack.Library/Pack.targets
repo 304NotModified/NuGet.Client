@@ -19,6 +19,7 @@ Copyright (c) .NET Foundation. All rights reserved.
   <UsingTask TaskName="NuGet.Build.Tasks.Pack.PackNuspecTask" AssemblyFile="$(NugetTaskAssemblyFile)" />
 
   <PropertyGroup>
+    <AllowPrereleaseDependencies Condition=" '$(AllowPrereleaseDependencies)' == '' ">true</AllowPrereleaseDependencies>
     <PackageId Condition=" '$(PackageId)' == '' ">$(AssemblyName)</PackageId>
     <PackageVersion Condition=" '$(PackageVersion)' == '' ">$(Version)</PackageVersion>
     <IncludeContentInPack Condition="'$(IncludeContentInPack)'==''">true</IncludeContentInPack>

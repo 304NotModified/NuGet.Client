@@ -160,6 +160,8 @@ namespace NuGet.Commands
                 builder.MinClientVersion = _packArgs.MinClientVersion;
             }
 
+            builder.AllowPrereleaseDependenciesInProductionPackage =
+                _packArgs.AllowPrereleaseDependenciesInProductionPackage;
 
             CheckForUnsupportedFrameworks(builder);
 

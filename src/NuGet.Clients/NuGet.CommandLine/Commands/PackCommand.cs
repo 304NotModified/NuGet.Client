@@ -78,6 +78,9 @@ namespace NuGet.CommandLine
         [Option(typeof(NuGetCommand), "CommandMSBuildPath")]
         public string MSBuildPath { get; set; }
 
+        [Option(typeof(NuGetCommand), "PackCommandAllowPrereleaseDependencies")]
+        public bool AllowPrereleaseDependencies { get; set; }
+
         // TODO: Temporarily hide the real ConfigFile parameter from the help text.
         // When we fix #3230, we should remove this property.
         public new string ConfigFile { get; set; }
@@ -90,6 +93,7 @@ namespace NuGet.CommandLine
             packArgs.OutputDirectory = OutputDirectory;
             packArgs.BasePath = BasePath;
             packArgs.MsBuildDirectory = MsBuildUtility.GetMsBuildDirectoryFromMsBuildPath(MSBuildPath, MSBuildVersion, Console);
+            packArgs.AllowPrereleaseDependenciesInProductionPackage = AllowPrereleaseDependencies;
 
             // Get the input file
             packArgs.Path = PackCommandRunner.GetInputFile(packArgs);

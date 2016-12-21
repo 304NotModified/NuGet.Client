@@ -50,6 +50,7 @@ namespace NuGet.Build.Tasks.Pack
         public bool IncludeBuildOutput { get; set; }
         public string BuildOutputFolder { get; set; }
         public string[] ContentTargetFolders { get; set; }
+        public bool AllowPrereleaseDependencies { get; set; }
 
         public ILogger Logger => new MSBuildLogger(Log);
 
@@ -98,6 +99,7 @@ namespace NuGet.Build.Tasks.Pack
         {
             return new PackTaskRequest
             {
+                AllowPrereleaseDependencies = AllowPrereleaseDependencies,
                 AssemblyName = StringUtility.TrimAndGetNullForEmpty(AssemblyName),
                 AssemblyReferences = MSBuildUtility.WrapMSBuildItem(AssemblyReferences),
                 Authors = StringUtility.TrimAndExcludeNullOrEmpty(Authors),

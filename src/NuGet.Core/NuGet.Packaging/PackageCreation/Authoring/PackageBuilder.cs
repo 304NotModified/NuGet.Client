@@ -314,6 +314,8 @@ namespace NuGet.Packaging
             set;
         }
 
+        public bool AllowPrereleaseDependenciesInProductionPackage { get; set; }
+
         public void Save(Stream stream)
         {
             // Make sure we're saving a valid package id
@@ -325,7 +327,7 @@ namespace NuGet.Packaging
                 throw new InvalidOperationException(NuGetResources.CannotCreateEmptyPackage);
             }
 
-            ValidateDependencyGroups(Version, DependencyGroups);
+            ValidateDependencyGroups(Version, DependencyGroups, AllowPrereleaseDependenciesInProductionPackage);
             ValidateReferenceAssemblies(Files, PackageAssemblyReferences);
 
             using (var package = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -436,7 +438,13 @@ namespace NuGet.Packaging
                  file.Path.EndsWith(".uninstall.xdt", StringComparison.OrdinalIgnoreCase)));
         }
 
-        public static void ValidateDependencyGroups(SemanticVersion version, IEnumerable<PackageDependencyGroup> dependencies)
+        public static void ValidateDependencyGroups(SemanticVersion version,
+            IEnumerable<PackageDependencyGroup> dependencies)
+        {
+            ValidateDependencyGroups(version, dependencies, false);
+        }
+
+        public static void ValidateDependencyGroups(SemanticVersion version, IEnumerable<PackageDependencyGroup> dependencies, bool allowPrereleaseDependencies)
         {
             if (version == null)
             {
@@ -453,7 +461,7 @@ namespace NuGet.Packaging
             {
                 // If we are creating a production package, do not allow any of the dependencies to be a prerelease version.
                 var prereleaseDependency = dependencies.SelectMany(set => set.Packages).FirstOrDefault(IsPrereleaseDependency);
-                if (prereleaseDependency != null)
+                if (!allowPrereleaseDependencies && prereleaseDependency != null)
                 {
                     throw new InvalidDataException(String.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_InvalidPrereleaseDependency, prereleaseDependency.ToString()));
                 }

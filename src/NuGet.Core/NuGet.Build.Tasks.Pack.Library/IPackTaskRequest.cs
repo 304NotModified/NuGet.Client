@@ -15,6 +15,7 @@ namespace NuGet.Build.Tasks.Pack
     /// </typeparam>
     public interface IPackTaskRequest<TItem>
     {
+        bool AllowPrereleaseDependencies { get; }
         string AssemblyName { get; }
         TItem[] AssemblyReferences { get; }
         string[] Authors { get; }
