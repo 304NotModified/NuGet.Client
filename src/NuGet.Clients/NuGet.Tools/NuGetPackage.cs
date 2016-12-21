@@ -9,7 +9,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
@@ -18,6 +17,7 @@ using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Utilities;
 using NuGet.Common;
 using NuGet.Credentials;
 using NuGet.Options;
@@ -29,7 +29,6 @@ using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGetConsole;
 using NuGetConsole.Implementation;
-using IMachineWideSettings = NuGet.Configuration.IMachineWideSettings;
 using ISettings = NuGet.Configuration.ISettings;
 using Resx = NuGet.PackageManagement.UI.Resources;
 using Strings = NuGet.PackageManagement.VisualStudio.Strings;
@@ -67,26 +66,18 @@ namespace NuGetVSExtension
 
         private static readonly object _credentialsPromptLock = new object();
 
-        private uint _solutionNotBuildingAndNotDebuggingContextCookie;
         private DTE _dte;
         private DTEEvents _dteEvents;
-        private IConsoleStatus _consoleStatus;
-        private IVsMonitorSelection _vsMonitorSelection;
 
-        private ISourceControlManagerProvider _sourceControlManagerProvider;
-        private ICommonOperations _commonOperations;
-        private ISourceRepositoryProvider _sourceRepositoryProvider;
-        private IDeleteOnRestartManager _deleteOnRestart;
+        private IVsMonitorSelection _vsMonitorSelection;
+        private uint _solutionNotBuildingAndNotDebuggingContextCookie;
 
         private OleMenuCommand _managePackageDialogCommand;
-
         private OleMenuCommand _managePackageForSolutionDialogCommand;
         private OleMenuCommandService _mcs;
         private bool _powerConsoleCommandExecuting;
 
-        private IMachineWideSettings _machineWideSettings;
         private NuGetUIProjectContext _uiProjectContext;
-        private NuGetSettings _nugetSettings = new NuGetSettings();
 
         private readonly HashSet<Uri> _credentialRequested = new HashSet<Uri>();
 
@@ -121,106 +112,44 @@ namespace NuGetVSExtension
             }
         }
 
-        private IConsoleStatus ConsoleStatus
-        {
-            get
-            {
-                if (_consoleStatus == null)
-                {
-                    _consoleStatus = ServiceLocator.GetInstanceSafe<IConsoleStatus>();
-                    Debug.Assert(_consoleStatus != null);
-                }
-
-                return _consoleStatus;
-            }
-        }
+        [Import]
+        private Lazy<IConsoleStatus> ConsoleStatus { get; set; }
 
         [Import]
-        private ISettings Settings { get; set; }
+        private Lazy<ISettings> Settings { get; set; }
+
+        [Import]
+        private SolutionUserOptions SolutionUserOptions { get; set; }
 
         [Import]
         private INuGetUILogger OutputConsoleLogger { get; set; }
 
-        private ISourceControlManagerProvider SourceControlManagerProvider
-        {
-            get
-            {
-                if (_sourceControlManagerProvider == null)
-                {
-                    _sourceControlManagerProvider = ServiceLocator.GetInstanceSafe<ISourceControlManagerProvider>();
-                }
-                return _sourceControlManagerProvider;
-            }
-        }
+        [Import]
+        private ISourceControlManagerProvider SourceControlManagerProvider { get; set; }
 
-        private ICommonOperations CommonOperations
-        {
-            get
-            {
-                if (_commonOperations == null)
-                {
-                    _commonOperations = ServiceLocator.GetInstanceSafe<ICommonOperations>();
-                }
-                return _commonOperations;
-            }
-        }
+        [Import]
+        private ICommonOperations CommonOperations { get; set; }
 
         [Import]
         private IVsSolutionManager SolutionManager { get; set; }
 
-        private void SolutionManager_NuGetProjectRenamed(object sender, NuGetProjectEventArgs e)
-        {
-            var project = SolutionManager.GetDTEProject(SolutionManager.GetNuGetProjectSafeName(e.NuGetProject));
-            var windowFrame = FindExistingWindowFrame(project);
-            if (windowFrame != null)
-            {
-                windowFrame.SetProperty((int)__VSFPROPID.VSFPROPID_OwnerCaption, String.Format(
-                    CultureInfo.CurrentCulture,
-                    Resx.Label_NuGetWindowCaption,
-                    project.Name));
-            }
-        }
+        [Import]
+        private Lazy<INuGetLockService> LockService { get; set; }
 
-        private ISourceRepositoryProvider SourceRepositoryProvider
-        {
-            get
-            {
-                if (_sourceRepositoryProvider == null)
-                {
-                    _sourceRepositoryProvider = ServiceLocator.GetInstance<ISourceRepositoryProvider>();
-                    Debug.Assert(_sourceRepositoryProvider != null);
-                }
-                return _sourceRepositoryProvider;
-            }
-        }
+        [Import]
+        private Lazy<ISourceRepositoryProvider> SourceRepositoryProvider { get; set; }
 
-        private IDeleteOnRestartManager DeleteOnRestart
-        {
-            get
-            {
-                if (_deleteOnRestart == null)
-                {
-                    _deleteOnRestart = ServiceLocator.GetInstance<IDeleteOnRestartManager>();
-                    Debug.Assert(_deleteOnRestart != null);
-                }
+        [ImportMany]
+        private IEnumerable<Lazy<NuGet.VisualStudio.IVsPackageManagerProvider, IOrderable>> PackageManagerProviders { get; set; }
 
-                return _deleteOnRestart;
-            }
-        }
+        [Import]
+        private Lazy<IPackageRestoreManager> PackageRestoreManager { get; set; }
 
-        private IMachineWideSettings MachineWideSettings
-        {
-            get
-            {
-                if (_machineWideSettings == null)
-                {
-                    _machineWideSettings = ServiceLocator.GetInstance<IMachineWideSettings>();
-                    Debug.Assert(_machineWideSettings != null);
-                }
+        [Import]
+        private Lazy<IOptionsPageActivator> OptionsPageActivator { get; set; }
 
-                return _machineWideSettings;
-            }
-        }
+        [Import]
+        private Lazy<IDeleteOnRestartManager> DeleteOnRestartManager { get; set; }
 
         private ProjectRetargetingHandler ProjectRetargetingHandler { get; set; }
 
@@ -236,11 +165,6 @@ namespace NuGetVSExtension
             componentModel.DefaultCompositionService.SatisfyImportsOnce(this);
 
             SolutionManager.AfterNuGetProjectRenamed += SolutionManager_NuGetProjectRenamed;
-            SolutionManager.SolutionOpened += (_, __) =>
-            {
-                _nugetSettings = new NuGetSettings();
-                LoadNuGetSettings();
-            };
 
             Styles.LoadVsStyles();
             Brushes.LoadVsBrushes();
@@ -273,16 +197,29 @@ namespace NuGetVSExtension
             // delete them now.
             if (SolutionManager.IsSolutionOpen)
             {
-                DeleteOnRestart.DeleteMarkedPackageDirectories(_uiProjectContext);
+                DeleteOnRestartManager.Value.DeleteMarkedPackageDirectories(_uiProjectContext);
             }
 
             ProjectRetargetingHandler = new ProjectRetargetingHandler(_dte, SolutionManager, this);
             ProjectUpgradeHandler = new ProjectUpgradeHandler(this, SolutionManager);
 
-            LoadNuGetSettings();
+            SolutionUserOptions.LoadSettings();
 
             // This instantiates a decoupled ICommand instance responsible to locate and display output pane by a UI control
             UI.Commands.ShowErrorsCommand = new ShowErrorsCommand(this);
+        }
+
+        private void SolutionManager_NuGetProjectRenamed(object sender, NuGetProjectEventArgs e)
+        {
+            var project = SolutionManager.GetDTEProject(SolutionManager.GetNuGetProjectSafeName(e.NuGetProject));
+            var windowFrame = FindExistingWindowFrame(project);
+            if (windowFrame != null)
+            {
+                windowFrame.SetProperty((int)__VSFPROPID.VSFPROPID_OwnerCaption, String.Format(
+                    CultureInfo.CurrentCulture,
+                    Resx.Label_NuGetWindowCaption,
+                    project.Name));
+            }
         }
 
         /// <summary>
@@ -517,16 +454,6 @@ namespace NuGetVSExtension
             return null;
         }
 
-        private static T GetProperty<T>(IVsHierarchy hier, __VSHPROPID propertyId)
-        {
-            object propertyValue;
-            hier.GetProperty(
-                (uint)VSConstants.VSITEMID.Root,
-                (int)propertyId,
-                out propertyValue);
-            return (T)propertyValue;
-        }
-
         private async Task<IVsWindowFrame> CreateNewWindowFrameAsync(Project project)
         {
             Debug.Assert(ThreadHelper.CheckAccess());
@@ -583,14 +510,12 @@ namespace NuGetVSExtension
                 (uint)_VSRDTFLAGS.RDT_DontAddToMRU |
                 (uint)_VSRDTFLAGS.RDT_DontSaveAs;
 
-            var solutionManager = ServiceLocator.GetInstance<ISolutionManager>();
-
-            if (!solutionManager.IsSolutionAvailable)
+            if (!SolutionManager.IsSolutionAvailable)
             {
                 throw new InvalidOperationException(Strings.SolutionIsNotSaved);
             }
 
-            var nugetProject = solutionManager.GetNuGetProject(EnvDTEProjectUtility.GetCustomUniqueName(project));
+            var nugetProject = SolutionManager.GetNuGetProject(EnvDTEProjectUtility.GetCustomUniqueName(project));
 
             // If we failed to generate a cache entry in the solution manager something went wrong.
             if (nugetProject == null)
@@ -604,8 +529,7 @@ namespace NuGetVSExtension
             // is thrown, an error dialog will pop up and this doc window will not be created.
             var installedPackages = await nugetProject.GetInstalledPackagesAsync(CancellationToken.None);
 
-            var uiContextFactory = ServiceLocator.GetInstance<INuGetUIContextFactory>();
-            var uiContext = uiContextFactory.Create(this, new[] { nugetProject });
+            var uiContext = CreateUIContext(nugetProject);
 
             var uiFactory = ServiceLocator.GetInstance<INuGetUIFactory>();
             var uiController = uiFactory.Create(uiContext, _uiProjectContext);
@@ -613,7 +537,7 @@ namespace NuGetVSExtension
             var model = new PackageManagerModel(uiController, uiContext, isSolution: false, editorFactoryGuid: GuidList.guidNuGetEditorType);
             var vsWindowSearchHostfactory = ServiceLocator.GetGlobalService<SVsWindowSearchHostFactory, IVsWindowSearchHostFactory>();
             var vsShell = ServiceLocator.GetGlobalService<SVsShell, IVsShell4>();
-            var control = new PackageManagerControl(model, Settings, vsWindowSearchHostfactory, vsShell, OutputConsoleLogger);
+            var control = new PackageManagerControl(model, Settings.Value, vsWindowSearchHostfactory, vsShell, OutputConsoleLogger);
             var windowPane = new PackageManagerWindowPane(control);
             var guidEditorType = GuidList.guidNuGetEditorType;
             var guidCommandUI = Guid.Empty;
@@ -664,6 +588,40 @@ namespace NuGetVSExtension
 
             ErrorHandler.ThrowOnFailure(hr);
             return windowFrame;
+        }
+
+        private INuGetUIContext CreateUIContext(params NuGetProject[] projects)
+        {
+            var packageManager = new NuGetPackageManager(
+                SourceRepositoryProvider.Value,
+                Settings.Value,
+                SolutionManager,
+                DeleteOnRestartManager.Value);
+
+            var actionEngine = new UIActionEngine(
+                SourceRepositoryProvider.Value,
+                packageManager,
+                LockService.Value);
+
+            // only pick up at most three integrated package managers
+            const int MaxPackageManager = 3;
+            var packageManagerProviders = PackageManagerProviderUtility.Sort(
+                PackageManagerProviders, MaxPackageManager);
+
+            var context = new NuGetUIContext(
+                SourceRepositoryProvider.Value,
+                SolutionManager,
+                packageManager,
+                actionEngine,
+                PackageRestoreManager.Value,
+                OptionsPageActivator.Value,
+                SolutionUserOptions,
+                packageManagerProviders)
+            {
+                Projects = projects
+            };
+
+            return context;
         }
 
         private void ShowManageLibraryPackageDialog(object sender, EventArgs e)
@@ -759,18 +717,6 @@ namespace NuGetVSExtension
             return parameterString.Substring(0, lastIndexOfSearchInSwitch);
         }
 
-        private void LoadNuGetSettings()
-        {
-            IVsSolutionPersistence solutionPersistence = GetGlobalService(typeof(SVsSolutionPersistence)) as IVsSolutionPersistence;
-            solutionPersistence.LoadPackageUserOpts(this, "nuget");
-        }
-
-        public void SaveNuGetSettings()
-        {
-            IVsSolutionPersistence solutionPersistence = GetGlobalService(typeof(SVsSolutionPersistence)) as IVsSolutionPersistence;
-            solutionPersistence.SavePackageUserOpts(this, "nuget");
-        }
-
         private async Task<IVsWindowFrame> CreateDocWindowForSolutionAsync()
         {
             IVsWindowFrame windowFrame = null;
@@ -808,8 +754,7 @@ namespace NuGetVSExtension
                 await project.GetInstalledPackagesAsync(CancellationToken.None);
             }
 
-            var uiContextFactory = ServiceLocator.GetInstance<INuGetUIContextFactory>();
-            var uiContext = uiContextFactory.Create(this, projects);
+            var uiContext = CreateUIContext(projects.ToArray());
 
             var uiFactory = ServiceLocator.GetInstance<INuGetUIFactory>();
             var uiController = uiFactory.Create(uiContext, _uiProjectContext);
@@ -819,7 +764,7 @@ namespace NuGetVSExtension
             model.SolutionName = solutionName;
             var vsWindowSearchHostfactory = ServiceLocator.GetGlobalService<SVsWindowSearchHostFactory, IVsWindowSearchHostFactory>();
             var vsShell = ServiceLocator.GetGlobalService<SVsShell, IVsShell4>();
-            var control = new PackageManagerControl(model, Settings, vsWindowSearchHostfactory, vsShell, OutputConsoleLogger);
+            var control = new PackageManagerControl(model, Settings.Value, vsWindowSearchHostfactory, vsShell, OutputConsoleLogger);
             var windowPane = new PackageManagerWindowPane(control);
             var guidEditorType = GuidList.guidNuGetEditorType;
             var guidCommandUI = Guid.Empty;
@@ -920,7 +865,7 @@ namespace NuGetVSExtension
         private void BeforeQueryStatusForPowerConsole(object sender, EventArgs args)
         {
             OleMenuCommand command = (OleMenuCommand)sender;
-            command.Enabled = !ConsoleStatus.IsBusy && !_powerConsoleCommandExecuting;
+            command.Enabled = !ConsoleStatus.Value.IsBusy && !_powerConsoleCommandExecuting;
         }
 
         private void BeforeQueryStatusForAddPackageDialog(object sender, EventArgs args)
@@ -942,7 +887,7 @@ namespace NuGetVSExtension
                 // a) if the console is NOT busy executing a command, AND
                 // b) if the solution exists and not debugging and not building AND
                 // c) if the active project is loaded and supported
-                command.Enabled = !ConsoleStatus.IsBusy && IsSolutionExistsAndNotDebuggingAndNotBuilding() && HasActiveLoadedSupportedProject;
+                command.Enabled = !ConsoleStatus.Value.IsBusy && IsSolutionExistsAndNotDebuggingAndNotBuilding() && HasActiveLoadedSupportedProject;
             });
         }
 
@@ -960,7 +905,7 @@ namespace NuGetVSExtension
                 // c) if the solution is DPL enabled or there are NuGetProjects. This means that there loaded, supported projects
                 // Checking for DPL more is a temporary code until we've the capability to get nuget projects
                 // even in DPL mode. See https://github.com/NuGet/Home/issues/3711
-                command.Enabled = !ConsoleStatus.IsBusy && IsSolutionExistsAndNotDebuggingAndNotBuilding() &&
+                command.Enabled = !ConsoleStatus.Value.IsBusy && IsSolutionExistsAndNotDebuggingAndNotBuilding() &&
                     (SolutionManager.IsSolutionDPLEnabled || SolutionManager.GetNuGetProjects().Any());
             });
         }
@@ -1028,7 +973,7 @@ namespace NuGetVSExtension
             _dteEvents = null;
         }
 
-        #region IVsPersistSolutionOpts implementation
+        #region IVsPersistSolutionOpts
 
         public int LoadUserOptions(IVsSolutionPersistence pPersistence, uint grfLoadOpts)
         {
@@ -1037,48 +982,19 @@ namespace NuGetVSExtension
 
         public int ReadUserOptions(IStream pOptionsStream, string pszKey)
         {
-            try
-            {
-                using (var stream = new DataStreamFromComStream(pOptionsStream))
-                {
-                    var serializer = new BinaryFormatter();
-                    var obj = serializer.Deserialize(stream) as NuGetSettings;
-                    if (obj != null)
-                    {
-                        _nugetSettings = obj;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
             return VSConstants.S_OK;
         }
 
         public int SaveUserOptions(IVsSolutionPersistence pPersistence)
         {
-            pPersistence.SavePackageUserOpts(this, "nuget");
-            return VSConstants.S_OK;
+            return SolutionUserOptions.SaveUserOptions(pPersistence);
         }
 
         public int WriteUserOptions(IStream pOptionsStream, string pszKey)
         {
-            try
-            {
-                using (var stream = new DataStreamFromComStream(pOptionsStream))
-                {
-                    var serializer = new BinaryFormatter();
-                    serializer.Serialize(stream, _nugetSettings);
-                }
-            }
-            catch
-            {
-            }
-
             return VSConstants.S_OK;
         }
 
-        #endregion IVsPersistSolutionOpts implementation
+        #endregion IVsPersistSolutionOpts
     }
 }

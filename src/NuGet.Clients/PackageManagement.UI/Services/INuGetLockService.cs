@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Threading;
 
 namespace NuGet.PackageManagement.UI
@@ -21,5 +22,11 @@ namespace NuGet.PackageManagement.UI
         /// <param name="token">A token whose cancellation indicates lost interest in obtaining the lock.</param>
         /// <returns>An awaitable object whose result is the lock releaser.</returns>
         IAsyncLockAwaitable AcquireLockAsync(CancellationToken token);
+
+        /// <summary>
+        /// Obtains a lock in synchronous/blocking manner.
+        /// </summary>
+        /// <returns>A disposable object that will release the lock on disposed event.</returns>
+        IDisposable AcquireLock();
     }
 }

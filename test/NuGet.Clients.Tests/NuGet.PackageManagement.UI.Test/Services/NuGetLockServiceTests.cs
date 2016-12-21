@@ -53,17 +53,33 @@ namespace NuGet.PackageManagement.UI.Test
         }
 
         [Fact]
+        public void AcquireLock_ObtainsLock()
+        {
+            var releaser = _lockService.AcquireLock();
+
+            Assert.True(_lockService.IsLockHeld);
+        }
+
+        [Fact]
+        public void Dispose_ReleasesLock()
+        {
+            var releaser = _lockService.AcquireLock();
+
+            releaser.Dispose();
+
+            Assert.False(_lockService.IsLockHeld);
+        }
+
+        [Fact]
         public async Task AcquireLockAsync_ObtainsLock()
         {
             var releaser = await _lockService.AcquireLockAsync(_cts.Token);
 
             Assert.True(_lockService.IsLockHeld);
-
-            releaser.Dispose();
         }
 
         [Fact]
-        public async Task Dispose_ReleasesLock()
+        public async Task Dispose_Async_ReleasesLock()
         {
             var releaser = await _lockService.AcquireLockAsync(_cts.Token);
 
@@ -77,7 +93,7 @@ namespace NuGet.PackageManagement.UI.Test
         {
             _cts.Cancel();
 
-            await Assert.ThrowsAsync<TaskCanceledException>(async () => await _lockService.AcquireLockAsync(_cts.Token));
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await _lockService.AcquireLockAsync(_cts.Token));
 
             Assert.False(_lockService.IsLockHeld);
         }

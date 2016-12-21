@@ -15,6 +15,11 @@ namespace NuGet.PackageManagement.UI
 
         public AsyncLockReleaser(AsyncLockAwaiter awaiter)
         {
+            if (awaiter == null)
+            {
+                throw new ArgumentNullException(nameof(awaiter));
+            }
+
             _awaiter = awaiter;
         }
 

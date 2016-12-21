@@ -9,9 +9,9 @@ namespace NuGet.PackageManagement.UI
 
         void AddSettings(string key, UserSettings obj);
 
-        void LoadSettings();
+        bool LoadSettings();
 
-        void PersistSettings();
+        bool PersistSettings();
 
         /// <summary>
         /// Apply the setting of whether to show preview window to all existing

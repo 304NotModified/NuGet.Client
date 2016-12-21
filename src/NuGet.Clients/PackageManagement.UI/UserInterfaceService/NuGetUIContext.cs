@@ -24,7 +24,6 @@ namespace NuGet.PackageManagement.UI
             UIActionEngine uiActionEngine,
             IPackageRestoreManager packageRestoreManager,
             IOptionsPageActivator optionsPageActivator,
-            IEnumerable<NuGetProject> projects,
             IUserSettingsManager userSettingsManager,
             IEnumerable<IVsPackageManagerProvider> packageManagerProviders)
         {
@@ -36,7 +35,6 @@ namespace NuGet.PackageManagement.UI
             PackageRestoreManager = packageRestoreManager;
             OptionsPageActivator = optionsPageActivator;
             UserSettingsManager = userSettingsManager;
-            _projects = projects.ToArray();
             PackageManagerProviders = packageManagerProviders;
         }
 

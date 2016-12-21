@@ -5,15 +5,13 @@ using System;
 using System.ComponentModel.Composition;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NuGet.PackageManagement.UI
 {
     /// <summary>
     /// MEF component providing the lock which guarantees non-overlapping execution of NuGet operations.
     /// </summary>
-    /// <remarks>
-    /// Inspired by https://blogs.msdn.microsoft.com/pfxteam/2011/01/13/await-anything/
-    /// </remarks>
     [Export(typeof(INuGetLockService))]
     [PartCreationPolicy(CreationPolicy.Shared)]
     public sealed class NuGetLockService : INuGetLockService, IDisposable
@@ -21,6 +19,12 @@ namespace NuGet.PackageManagement.UI
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public bool IsLockHeld => _semaphore.CurrentCount == 0;
+
+        public IDisposable AcquireLock()
+        {
+            _semaphore.Wait();
+            return new SemaphoreLockReleaser(_semaphore);
+        }
 
         public IAsyncLockAwaitable AcquireLockAsync(CancellationToken token)
         {
@@ -32,13 +36,52 @@ namespace NuGet.PackageManagement.UI
             _semaphore.Dispose();
         }
 
+        private class SemaphoreLockReleaser : IDisposable
+        {
+            private readonly SemaphoreSlim _semaphore;
+            private bool _isDisposed = false;
+
+            public SemaphoreLockReleaser(SemaphoreSlim semaphore)
+            {
+                _semaphore = semaphore;
+            }
+
+            public void Dispose()
+            {
+                Dispose(true);
+                GC.SuppressFinalize(this);
+            }
+
+            private void Dispose(bool _)
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                try
+                {
+                    _semaphore.Release();
+                }
+                catch (ObjectDisposedException) { }
+
+                _isDisposed = true;
+            }
+
+            ~SemaphoreLockReleaser()
+            {
+                Dispose(false);
+            }
+        }
+
         // Custom awaiter which wraps the awaiter for a task awaiting the semaphore lock.
         // This awaiter implementation wraps a TaskAwaiter, and this implementation’s 
         // IsCompleted, OnCompleted, and GetResult members delegate to the contained TaskAwaiter’s.
         private class SemaphoreLockAwaiter : AsyncLockAwaiter, IAsyncLockAwaitable
         {
-            private readonly TaskAwaiter _awaiter;
             private readonly SemaphoreSlim _semaphore;
+            private readonly CancellationToken _token;
+            private readonly TaskAwaiter _awaiter;
 
             private bool _isReleased = false;
 
@@ -49,7 +92,13 @@ namespace NuGet.PackageManagement.UI
                     throw new ArgumentNullException(nameof(semaphore));
                 }
 
+                if (token == null)
+                {
+                    throw new ArgumentNullException(nameof(token));
+                }
+
                 _semaphore = semaphore;
+                _token = token;
                 _awaiter = _semaphore.WaitAsync(token).GetAwaiter();
             }
 
@@ -59,7 +108,18 @@ namespace NuGet.PackageManagement.UI
 
             public override IDisposable GetResult()
             {
-                _awaiter.GetResult();
+                try
+                {
+                    _awaiter.GetResult();
+                }
+                catch (TaskCanceledException) when (_token.IsCancellationRequested)
+                {
+                    // when token is canceled before WaitAsync is called 
+                    // GetResult would throw TaskCanceledException.
+                    // This clause solves this incosistency.
+                    throw new OperationCanceledException();
+                }
+
                 return new AsyncLockReleaser(this);
             }
 
@@ -71,7 +131,11 @@ namespace NuGet.PackageManagement.UI
                 {
                     _isReleased = true;
 
-                    _semaphore.Release();
+                    try
+                    {
+                        _semaphore.Release();
+                    }
+                    catch (ObjectDisposedException) { }
                 }
             }
         }
